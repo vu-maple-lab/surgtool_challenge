@@ -33,6 +33,7 @@ def main(args):
     # model is ResNet-101
     model = ResNet(ResidualBlock, [3, 4, 23, 3]).to(device)
 
+    # specify loss
         
 
 if __name__ == '__main__':

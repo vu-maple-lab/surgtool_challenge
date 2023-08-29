@@ -6,7 +6,6 @@ import numpy as np
 import glob as glob
 from natsort import natsorted
 from torchvision import transforms, utils
-from PIL import Image, ImageFilter, ImageChops
 from pathlib import Path
 import cv2 as cv
 from utils import TOOLS_ONE_HOT_ENCODING, process_binary
@@ -18,32 +17,31 @@ class Endovis23Dataset(Dataset):
         self.debug = debug
 
         color_dir = root_dir / 'raw' / 'color'
-        mask_dir = root_dir / 'raw' / 'mask'
+        mask_dir = root_dir / 'raw' / 'processed_mask'
         labels_path = root_dir / 'labels.csv'
 
         if not ((color_dir).exists() and (mask_dir).exists() and (labels_path).exists()):
             raise Exception("Your input_dir must include a labels.csv and a raw/ file with color/ and mask/ inside")
         
         # extract the paths of the color and mask imgs
-        self.path_color_imgs = natsorted(glob.glob(str(color_dir / '*.jpg')))
+        self.path_color_imgs = color_dir
         self.path_mask_imgs = natsorted(glob.glob(str(mask_dir / '*.jpg')))
-
-        assert len(self.path_color_imgs) == len(self.path_mask_imgs), 'num of mask imgs and color imgs should match'
 
         # extract csv file
         self.labels = pd.read_csv(labels_path)
 
     def __len__(self):
         if self.debug:
-            print(f'The length of our data is {len(self.path_color_imgs)}')
-        return len(self.path_color_imgs)
+            print(f'The length of our data is {len(self.path_mask_imgs)}')
+        return len(self.path_mask_imgs)
 
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
         
-        image = np.array(Image.open(self.path_color_imgs[idx]))
-        mask = process_binary(np.array(Image.open(self.path_mask_imgs[idx])))
+        # image = np.array(Image.open(self.path_color_imgs[idx]))
+        mask = cv.imread(self.path_mask_imgs[idx])
+        image = self.find_corresponding_img(mask)
 
         # first apply transformations if they exists
         if self.transforms:
@@ -78,6 +76,10 @@ class Endovis23Dataset(Dataset):
         tool_label_onehot = self.get_one_hot(tool_label)
         return np.array(attentioned_image), tool_label_onehot
 
+    def find_corresponding_img(self, mask_path):
+        mask_name = Path(mask_path).name
+        return cv.imread(str(self.path_color_imgs / mask_name))
+
     def get_one_hot(self, labels):
         result = np.zeros(14)
         for label in labels:
@@ -90,16 +92,17 @@ class Endovis23Dataset(Dataset):
         return result
 
     def get_attention_mask(self, mask):
-        assert len(mask.size) == 2, 'your mask should be some binary or grayscale image not color'
-        blurred_img = mask.filter(ImageFilter.GaussianBlur)
+        assert len(mask.shape) == 2, 'your mask should be some binary or grayscale image not color'
+        kernel = np.ones((7,7),np.float32) / 49
+        blurred_img = cv.filter2D(mask, -1, kernel)
         if self.debug:
             blurred_img.save('./test/attention_mask_debug.jpg')
         return blurred_img
     
     def apply_attention(self, image, mask):
         assert image.size[0] == mask.size[0] and image.size[1] == mask.size[1], 'dimensions of the image and mask should match'
-        result = ImageChops.multiply(image, mask)
+        result = image * mask
         if self.debug:
             image.save('./test/original_rgb_debug.jpg')
             result.save('./test/rgb_applied_attention_debug.jpg')
-        return result
+        return result.astype('uint8')

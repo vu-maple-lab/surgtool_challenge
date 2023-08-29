@@ -8,7 +8,6 @@ import matplotlib.pyplot as plt
 import os
 from dataset import * 
 from models import ResNet
-from utils import filter_segmentations
 
 def main(args):
     # process command ling args
@@ -27,9 +26,6 @@ def main(args):
         raise Exception("logs directory does not exist")
     if debug and not os.path.exists('./test'):
         os.mkdir('./test')
-
-    # filter out bad segmentations
-    filter_segmentations(data_dir)
 
     # define dataset + dataloader
     endovis_dataset = Endovis23Dataset(data_dir, debug)

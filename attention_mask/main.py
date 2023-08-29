@@ -7,7 +7,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import os
 from dataset import * 
-from models import ResNet
+from models import ResNet, ResidualBlock
 
 def main(args):
     # process command ling args
@@ -16,8 +16,7 @@ def main(args):
     debug = args.debug
 
     # cuda
-    gpu_bool = torch.cuda.is_available()
-    print(f'CUDA?: {gpu_bool}')
+    device = torch.device("cuda:0" if torch.cuda.is_available() else 'cpu')
 
     # path checking
     if not data_dir.exists():
@@ -31,8 +30,8 @@ def main(args):
     endovis_dataset = Endovis23Dataset(data_dir, debug)
     endovis_dataloader = DataLoader(endovis_dataset, batch_size=4, shuffle=True, num_workers=0)
     
-    # define model + optim and loss
-    model = ResNet()
+    # model is ResNet-101
+    model = ResNet(ResidualBlock, [3, 4, 23, 3]).to(device)
 
         
 

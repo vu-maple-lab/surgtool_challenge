@@ -5,15 +5,14 @@ from torch.utils.data import Dataset
 import numpy as np
 import glob as glob
 from natsort import natsorted
-from torchvision import transforms, utils
 from pathlib import Path
 import cv2 as cv
 from utils import TOOLS_ONE_HOT_ENCODING
 
 class Endovis23Dataset(Dataset):
 
-    def __init__(self, root_dir, debug=False, transform=None):
-        self.transforms = transform
+    def __init__(self, root_dir, debug=False, transforms=None):
+        self.transform = transforms
         self.debug = debug
 
         color_dir = root_dir / 'raw' / 'color'
@@ -46,7 +45,7 @@ class Endovis23Dataset(Dataset):
         image = self.find_corresponding_img(self.path_mask_imgs[idx])
 
         # first apply transformations if they exists
-        if self.transforms:
+        if self.transform:
             image = self.transform(image)
             mask = self.transform(mask)
             if self.debug: 

@@ -17,5 +17,5 @@ class ResNet(nn.Module):
     def forward(self, x):
         x = self.resnet(x)
         x = self.last_layer(x)
-        x = self.sigmoid(x) 
+        # x = self.sigmoid(x) 
         return x

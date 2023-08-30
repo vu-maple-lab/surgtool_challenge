@@ -1,5 +1,5 @@
 import argparse 
-from utils import filter_segmentations
+from utils import filter_segmentations, train_test_split
 from pathlib import Path
 import os
 
@@ -12,7 +12,8 @@ def main(args):
     if debug and not os.path.exists('./test'):
         os.mkdir('./test')
 
-    filter_segmentations(data_dir, debug)
+    # filter_segmentations(data_dir, debug)
+    train_test_split(data_dir, 0.7, debug)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

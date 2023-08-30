@@ -1,7 +1,9 @@
 import cv2 as cv
 import numpy as np
 import os 
+import torch 
 from tqdm import tqdm
+import random
 from pathlib import Path
 import glob
 from natsort import natsorted
@@ -22,6 +24,58 @@ TOOLS_ONE_HOT_ENCODING = {
     'permanent cautery hook/spatula': 12,
     'grasping retractor': 13
 }
+
+device = torch.device("cuda:0" if torch.cuda.is_available() else 'cpu')
+
+def train_test_split(root_dir, split_val, debug):
+    assert split_val < 1 and split_val > 0
+    color_dir = root_dir / 'raw' / 'color'
+    mask_dir = root_dir / 'raw' / 'processed_mask'
+    save_dir = root_dir / 'actual'
+
+    train_dir = save_dir / 'train'
+    test_dir = save_dir / 'test'
+
+    path_mask_imgs = glob.glob(str(mask_dir / '*.jpg'))
+    random.shuffle(path_mask_imgs)
+    train_set_cutoff = int(split_val * len(path_mask_imgs))
+
+    for i, mask_path in enumerate(tqdm(path_mask_imgs)):
+        # save it in train 
+        if i < train_set_cutoff:
+            # get the mask image and save it to train 
+            save_path_mask = train_dir / 'mask' 
+            command = 'cp ' + mask_path + ' ' + str(save_path_mask)
+            os.system(command)
+            if debug:
+                print(f"command: {command}") 
+
+            # get the color image and save it to train
+            save_path_color = train_dir / 'color'
+            color_img_path = color_dir / Path(mask_path).name 
+            command = 'cp ' + str(color_img_path) + ' ' + str(save_path_color)
+            os.system(command)
+
+            if debug:
+                print(f"command: {command}") 
+
+        # save it in test
+        else:
+            save_path_mask = test_dir / 'mask' 
+            command = 'cp ' + mask_path + ' ' + str(save_path_mask)
+            os.system(command)
+            if debug:
+                print(f"command: {command}") 
+
+            # get the color image and save it to train
+            save_path_color = test_dir / 'color'
+            color_img_path = color_dir / Path(mask_path).name 
+            command = 'cp ' + str(color_img_path) + ' ' + str(save_path_color)
+            os.system(command)
+
+            if debug:
+                print(f"command: {command}") 
+    print('All done!')
 
 # process_binary reads in mask image to denoise and encourage connectivity
 # mask: grayscale image that represents the mask 
@@ -143,4 +197,76 @@ def filter_segmentations(root_dir, debug):
             cv.imwrite('./test/new_mask_debug.jpg', new_mask)
             break 
             
+def calc_accuracy(y, y_hat):
+    pass 
+
+def train_one_epoch(model, dataloader, loss, optim, scheduler, debug=False):
+    
+    # set model to train
+    model.train()
+
+    # get metrics of our current performance during training
+    running_loss = 0.
+    running_acc = 0.
+    
+    for i, (x, y_hat) in enumerate(dataloader):
+        x = x.to(device).float()
+        y_hat = y_hat.to(device).float()
+
+        optim.zero_grad()
+        y = model(x)
+        loss_val = loss(y, y_hat)
+        loss_val.backward()
+        optim.step()
+        scheduler.step()
+
+        breakpoint()
+        running_loss += loss_val.item()
+        running_acc += calc_accuracy(y, y_hat)
+    
+    return running_loss / (i+1), running_acc / (i+1)
+
+
+def test_one_epoch(model, dataloader, loss, debug=False):
+    # set model to evaluation
+    model.eval()
+    # get metrics of our current performance during training
+    running_loss = 0.
+    running_acc = 0.
+    
+    for i, (x, y_hat) in enumerate(dataloader):
+        x = x.to(device).float()
+        y_hat = y_hat.to(device).float()
+        y = model(x)
+        loss_val = loss(y, y_hat)
+        running_loss += loss_val.item()
+        running_acc += calc_accuracy(y, y_hat)
+    
+    return running_loss / (i+1), running_acc / (i+1)
+
+def train(model, dataloaders, loss, optim, scheduler, epochs, debug=False):
+    
+    # initialize log vectors 
+    train_loss = []
+    train_acc = []
+    test_loss = []
+    test_acc = []
+
+    # set model to cuda
+    model = model.to(device)
+    # start training loop
+    for i in range(epochs):
+        print(f"EPOCH: {i+1}")
+        train_results = train_one_epoch(model, dataloaders[0], loss, optim, scheduler, debug)
+        test_results = test_one_epoch(model, dataloaders[1], loss, debug)
+        log_results(train_loss, train_acc, test_loss, test_acc, train_results, test_results, debug)
         
+
+
+def log_results(train_loss, train_acc, test_loss, test_acc, train_results, test_results, debug=False):
+    print(f'Training Loss: {train_results[0]} Testing Loss: {test_results[0]}')
+    print(f'Training Accuracy: {train_results[1]} Testing Accuracy: {test_results[1]}')
+    train_loss.append(train_results[0])
+    train_acc.append(train_results[1])
+    test_loss.append(test_results[0])
+    test_acc.append(test_results[1])

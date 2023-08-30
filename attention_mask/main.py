@@ -7,7 +7,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import os
 from dataset import * 
-from models import ResNet, ResidualBlock
+from models import ResNet
 
 def main(args):
     # process command ling args
@@ -17,6 +17,8 @@ def main(args):
 
     # cuda
     device = torch.device("cuda:0" if torch.cuda.is_available() else 'cpu')
+    if debug:
+        print(f"cuda?: {device}")
 
     # path checking
     if not data_dir.exists():
@@ -30,16 +32,23 @@ def main(args):
     endovis_dataset = Endovis23Dataset(data_dir, debug)
     endovis_dataloader = DataLoader(endovis_dataset, batch_size=4, shuffle=True, num_workers=0)
 
-    for i, (x, y_hat) in enumerate(endovis_dataloader):
-        x = x.to(device)
-        y_hat = y_hat.to(device)
-        breakpoint()
+    # define model and freeze parameters
+    model = ResNet()
+    for name, param in model.named_parameters():
+        if "last_layer" in name or "resnet.conv1" in name or "sigmoid" in name:
+            continue
+        param.requires_grad = False 
     
-    # model is ResNet-101
-    # model = ResNet(ResidualBlock, [3, 4, 23, 3]).to(device)
+    for name, param in model.named_parameters():
+        if param.requires_grad == True: 
+            print(name)
+       
 
-    # specify loss
+    # for i, (x, y_hat) in enumerate(endovis_dataloader):
+    #     x = x.to(device)
+    #     y_hat = y_hat.to(device)
         
+    
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

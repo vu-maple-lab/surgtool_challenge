@@ -8,7 +8,7 @@ from natsort import natsorted
 from torchvision import transforms, utils
 from pathlib import Path
 import cv2 as cv
-from utils import TOOLS_ONE_HOT_ENCODING, process_binary
+from utils import TOOLS_ONE_HOT_ENCODING
 
 class Endovis23Dataset(Dataset):
 
@@ -20,7 +20,7 @@ class Endovis23Dataset(Dataset):
         mask_dir = root_dir / 'raw' / 'processed_mask'
         labels_path = root_dir / 'labels.csv'
 
-        if not ((color_dir).exists() and (mask_dir).exists() and (labels_path).exists()):
+        if not (color_dir.exists() and mask_dir.exists() and labels_path.exists()):
             raise Exception("Your input_dir must include a labels.csv and a raw/ file with color/ and mask/ inside")
         
         # extract the paths of the color and mask imgs
@@ -28,7 +28,9 @@ class Endovis23Dataset(Dataset):
         self.path_mask_imgs = natsorted(glob.glob(str(mask_dir / '*.jpg')))
 
         # extract csv file
-        self.labels = pd.read_csv(labels_path)
+        csv_labels = pd.read_csv(labels_path)
+        self.clip_names = list(csv_labels['clip_name'])
+        self.tools_present = list(csv_labels['tools_present'])
 
     def __len__(self):
         if self.debug:
@@ -40,13 +42,16 @@ class Endovis23Dataset(Dataset):
             idx = idx.tolist()
         
         mask = cv.imread(self.path_mask_imgs[idx])
-        mask = np.uint8(np.dot(mask[...,:3], [0.2989, 0.5870, 0.1140]))
+        mask = np.uint8(np.dot(mask[...,:3], [0.2989, 0.5870, 0.1140])) # ensure that we have a 1 channel, uint8 mask 
         image = self.find_corresponding_img(self.path_mask_imgs[idx])
 
         # first apply transformations if they exists
         if self.transforms:
             image = self.transform(image)
             mask = self.transform(mask)
+            if self.debug: 
+                cv.imwrite('./test/transformed_original_img_debug.jpg', image)
+                cv.imwrite('./test/transformed_mask_img_debug.jpg', mask)
         
         # apply smoothed attention mask 
         r = 15
@@ -58,10 +63,10 @@ class Endovis23Dataset(Dataset):
         if self.debug:
             print(f'The clip name is: {img_name}')
         try:
-            clip_index = list(self.labels['clip_name']).index(img_name)
+            clip_index = self.clip_names.index(img_name)
         except ValueError: 
-            print('can not find clip name from labels.csv')
-        tool_label = list(self.labels['tools_present'])[clip_index]
+            print(f'can not find clip name "{img_name}" from labels.csv')
+        tool_label = self.tools_present[clip_index]
         tool_label = tool_label[1:-1].split(', ') # get rid of [] chars and put into list of strings
 
         # some had leading or ending spaces which we need to get rid of 
@@ -73,14 +78,17 @@ class Endovis23Dataset(Dataset):
         if 'nan' in tool_label:
             tool_label.remove('nan')
         
-        # one-hot encoding of label
-        tool_label_onehot = self.get_one_hot(tool_label)
-        return np.array(attentioned_image), tool_label_onehot
+        # "one-hot encoding" of label
+        y_hat = self.get_one_hot(tool_label)
+
+        # our input to the image should be the rgb, attentioned image, and segmentation mask, ie H x W X 7
+        x = np.concatenate((image, attentioned_image, np.expand_dims(mask, axis=2)), axis=2, dtype='uint8')
+        return x, y_hat
 
     def find_corresponding_img(self, mask_path):
         mask_name = Path(mask_path).name
         if self.debug:
-            cv.imwrite('./test/found_color_img_debug.jpg', cv.imread(str(self.path_color_imgs / mask_name)))
+            cv.imwrite('./test/found_corresponding_color_img_debug.jpg', cv.imread(str(self.path_color_imgs / mask_name)))
         return cv.imread(str(self.path_color_imgs / mask_name))
 
     def get_one_hot(self, labels):

@@ -39,9 +39,9 @@ class Endovis23Dataset(Dataset):
         if torch.is_tensor(idx):
             idx = idx.tolist()
         
-        # image = np.array(Image.open(self.path_color_imgs[idx]))
         mask = cv.imread(self.path_mask_imgs[idx])
-        image = self.find_corresponding_img(mask)
+        mask = np.uint8(np.dot(mask[...,:3], [0.2989, 0.5870, 0.1140]))
+        image = self.find_corresponding_img(self.path_mask_imgs[idx])
 
         # first apply transformations if they exists
         if self.transforms:
@@ -49,11 +49,12 @@ class Endovis23Dataset(Dataset):
             mask = self.transform(mask)
         
         # apply smoothed attention mask 
-        attn_mask = self.get_attention_mask(mask)
+        r = 15
+        attn_mask = self.get_attention_mask(mask, r)
         attentioned_image = self.apply_attention(image, attn_mask)
 
         # extract label
-        img_name = 'clip_' + str(Path(self.path_color_imgs[idx]).stem)[:6]
+        img_name = 'clip_' + str(Path(self.path_mask_imgs[idx]).stem)[:6]
         if self.debug:
             print(f'The clip name is: {img_name}')
         try:
@@ -78,6 +79,8 @@ class Endovis23Dataset(Dataset):
 
     def find_corresponding_img(self, mask_path):
         mask_name = Path(mask_path).name
+        if self.debug:
+            cv.imwrite('./test/found_color_img_debug.jpg', cv.imread(str(self.path_color_imgs / mask_name)))
         return cv.imread(str(self.path_color_imgs / mask_name))
 
     def get_one_hot(self, labels):
@@ -91,18 +94,20 @@ class Endovis23Dataset(Dataset):
             print(f'Our one hot encoding is:\n {result}')
         return result
 
-    def get_attention_mask(self, mask):
+    def get_attention_mask(self, mask, r):
         assert len(mask.shape) == 2, 'your mask should be some binary or grayscale image not color'
-        kernel = np.ones((7,7),np.float32) / 49
+        kernel = np.ones((r,r),np.float32) / (r ** 2)
         blurred_img = cv.filter2D(mask, -1, kernel)
         if self.debug:
-            blurred_img.save('./test/attention_mask_debug.jpg')
+            cv.imwrite('./test/attention_mask_debug.jpg', blurred_img)
         return blurred_img
     
     def apply_attention(self, image, mask):
-        assert image.size[0] == mask.size[0] and image.size[1] == mask.size[1], 'dimensions of the image and mask should match'
+        assert image.shape[0] == mask.shape[0] and image.shape[1] == mask.shape[1], 'dimensions of the image and mask should match'
+        # an attention map should be [0, 1]
+        mask = np.stack((mask/255.0,)*3, axis=-1)
         result = image * mask
         if self.debug:
-            image.save('./test/original_rgb_debug.jpg')
-            result.save('./test/rgb_applied_attention_debug.jpg')
+            cv.imwrite('./test/original_rgb_debug.jpg', image)
+            cv.imwrite('./test/rgb_applied_attention_debug.jpg', result)
         return result.astype('uint8')

@@ -29,9 +29,14 @@ def main(args):
     # define dataset + dataloader
     endovis_dataset = Endovis23Dataset(data_dir, debug)
     endovis_dataloader = DataLoader(endovis_dataset, batch_size=4, shuffle=True, num_workers=0)
+
+    for i, (x, y_hat) in enumerate(endovis_dataloader):
+        x = x.to(device)
+        y_hat = y_hat.to(device)
+        breakpoint()
     
     # model is ResNet-101
-    model = ResNet(ResidualBlock, [3, 4, 23, 3]).to(device)
+    # model = ResNet(ResidualBlock, [3, 4, 23, 3]).to(device)
 
     # specify loss
         

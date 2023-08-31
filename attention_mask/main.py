@@ -7,11 +7,10 @@ import argparse
 from PIL import Image
 from pathlib import Path
 import math
-import matplotlib.pyplot as plt
 import os
 from dataset import * 
 from models import ResNet
-from utils import train
+from utils import train, prepare_logs, save_vis
 
 def main(args):
 
@@ -35,18 +34,16 @@ def main(args):
 
     # augmentations to apply
     color_transforms = T.Compose([T.ToPILImage(), 
-                                  T.Resize(256), 
-                                  T.CenterCrop(224),
+                                  T.Resize(512), 
                                   T.ToTensor(),
                                   T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
     
     mask_transforms = T.Compose([T.ToPILImage(), 
-                                 T.Resize(256), 
-                                 T.CenterCrop(224),
+                                 T.Resize(512), 
                                  T.ToTensor()])
     # define dataset
     train_dataset = Endovis23Dataset(data_dir, train=True, debug=debug, color_transforms=color_transforms, mask_transforms=mask_transforms)
-    test_dataset = Endovis23Dataset(data_dir, train=False, debug=debug, color_transforms=None, mask_transforms=None)
+    test_dataset = Endovis23Dataset(data_dir, train=False, debug=debug, color_transforms=color_transforms, mask_transforms=mask_transforms)
 
     # split train-test + define dataloader
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
@@ -54,7 +51,7 @@ def main(args):
     
     if debug:
         _, _ = next(iter(train_dataloader))
-    breakpoint()
+    prepare_logs(logs_dir)
 
     # define model and freeze parameters
     model = ResNet()
@@ -70,10 +67,9 @@ def main(args):
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optim, steps)
 
     # train + test
-    logs = train(model, (train_dataloader, test_dataloader), loss, optim, scheduler, epochs, debug)
-    # results = test(model, test_dataloader, loss, debug)
+    logs = train(model, (train_dataloader, test_dataloader), loss, optim, scheduler, epochs, logs_dir, debug)
+    save_vis(logs_dir, logs)
 
-    
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

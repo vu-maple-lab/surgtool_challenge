@@ -7,6 +7,7 @@ import random
 from pathlib import Path
 import glob
 from natsort import natsorted
+import matplotlib.pyplot as plt 
 
 TOOLS_ONE_HOT_ENCODING = {
     'needle driver': 0,
@@ -199,7 +200,12 @@ def filter_segmentations(root_dir, debug):
             break 
             
 def calc_accuracy(y, y_hat):
-    pass 
+    batch_size, num_classes = y_hat.shape
+    running_avg = 0.
+    for i in range(batch_size):
+        predictions = torch.round(torch.sigmoid(y[i,:]))
+        running_avg += (torch.sum(predictions == y_hat[i,:])) / num_classes
+    return running_avg / batch_size
 
 def train_one_epoch(model, dataloader, loss, optim, scheduler, debug=False):
     
@@ -210,7 +216,8 @@ def train_one_epoch(model, dataloader, loss, optim, scheduler, debug=False):
     running_loss = 0.
     running_acc = 0.
     
-    for i, (x, y_hat) in enumerate(dataloader):
+    print("Training")
+    for i, (x, y_hat) in enumerate(tqdm(dataloader)):
         x = x.to(device).float()
         y_hat = y_hat.to(device).float()
 
@@ -220,8 +227,6 @@ def train_one_epoch(model, dataloader, loss, optim, scheduler, debug=False):
         loss_val.backward()
         optim.step()
         scheduler.step()
-
-        breakpoint()
         running_loss += loss_val.item()
         running_acc += calc_accuracy(y, y_hat)
     
@@ -235,7 +240,8 @@ def test_one_epoch(model, dataloader, loss, debug=False):
     running_loss = 0.
     running_acc = 0.
     
-    for i, (x, y_hat) in enumerate(dataloader):
+    print("Testing")
+    for i, (x, y_hat) in enumerate(tqdm(dataloader)):
         x = x.to(device).float()
         y_hat = y_hat.to(device).float()
         y = model(x)
@@ -245,7 +251,7 @@ def test_one_epoch(model, dataloader, loss, debug=False):
     
     return running_loss / (i+1), running_acc / (i+1)
 
-def train(model, dataloaders, loss, optim, scheduler, epochs, debug=False):
+def train(model, dataloaders, loss, optim, scheduler, epochs, logs_dir, debug=False):
     
     # initialize log vectors 
     train_loss = []
@@ -253,15 +259,24 @@ def train(model, dataloaders, loss, optim, scheduler, epochs, debug=False):
     test_loss = []
     test_acc = []
 
-    # set model to cuda
+    # set model to cuda and initialize best model
     model = model.to(device)
+    best_model = model 
+
     # start training loop
     for i in range(epochs):
-        print(f"EPOCH: {i+1}")
+        print(f"EPOCH: {i+1} / {epochs}")
         train_results = train_one_epoch(model, dataloaders[0], loss, optim, scheduler, debug)
         test_results = test_one_epoch(model, dataloaders[1], loss, debug)
         log_results(train_loss, train_acc, test_loss, test_acc, train_results, test_results, debug)
-        
+        if test_results[0] == min(test_loss):
+            best_model = model 
+    
+    # save dicts
+    torch.save(best_model.state_dict(), str(logs_dir / 'checkpoints' / 'best_model.pt'))
+    torch.save(optim.state_dict(), str(logs_dir / 'checkpoints' / 'optimizer.pt'))
+    torch.save(scheduler.state_dict(), str(logs_dir / 'checkpoints' / 'scheduler.pt'))
+    return train_loss, train_acc, test_loss, test_acc
 
 
 def log_results(train_loss, train_acc, test_loss, test_acc, train_results, test_results, debug=False):
@@ -271,3 +286,38 @@ def log_results(train_loss, train_acc, test_loss, test_acc, train_results, test_
     train_acc.append(train_results[1])
     test_loss.append(test_results[0])
     test_acc.append(test_results[1])
+
+def prepare_logs(logs_dir):
+    if not (logs_dir / 'checkpoints').exists():
+        os.mkdir(str(logs_dir / 'checkpoints'))
+    if not (logs_dir / 'visualizations').exists():
+        os.mkdir(str(logs_dir / 'visualizations'))
+
+def save_vis(logs_dir, logs):
+    # training loss 
+    plt.plot(np.array(logs[0]))
+    plt.title('Training loss vs. Epochs')
+    plt.xlabel('Epochs')
+    plt.ylabel('Training Loss')
+    plt.savefig(str(logs_dir / 'visusalizations' / 'training_loss.png'))
+
+    # training accuracy 
+    plt.plot(np.array(logs[1]))
+    plt.title('Training Accuracy vs. Epochs')
+    plt.xlabel('Epochs')
+    plt.ylabel('Training Accuracy')
+    plt.savefig(str(logs_dir / 'visusalizations' / 'training_acc.png'))
+
+    # testing loss 
+    plt.plot(np.array(logs[2]))
+    plt.title('Testing loss vs. Epochs')
+    plt.xlabel('Epochs')
+    plt.ylabel('Testing Loss')
+    plt.savefig(str(logs_dir / 'visusalizations' / 'testing_loss.png'))
+
+    # testing accuracy
+    plt.plot(np.array(logs[3]))
+    plt.title('Testing Accuracy vs. Epochs')
+    plt.xlabel('Epochs')
+    plt.ylabel('Testing Accuracy')
+    plt.savefig(str(logs_dir / 'visusalizations' / 'testing_acc.png'))

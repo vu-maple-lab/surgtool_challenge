@@ -49,14 +49,6 @@ class Endovis23Dataset(Dataset):
         mask = cv.imread(self.path_mask_imgs[idx])
         mask = np.uint8(np.dot(mask[...,:3], [0.2989, 0.5870, 0.1140])) # ensure that we have a 1 channel, uint8 mask 
         image = self.find_corresponding_img(self.path_mask_imgs[idx])
-
-        # first apply transformations if they exists
-        if self.color_transform and self.mask_transforms:
-            image = self.color_transform(image)
-            mask = self.mask_transform(mask)
-            if self.debug: 
-                cv.imwrite('./test/transformed_original_img_debug.jpg', image)
-                cv.imwrite('./test/transformed_mask_img_debug.jpg', mask)
         
         # apply smoothed attention mask 
         r = 15
@@ -86,8 +78,17 @@ class Endovis23Dataset(Dataset):
         # "one-hot encoding" of label
         y_hat = self.get_one_hot(tool_label)
 
+        # apply transformations if they exists
+        if self.color_transform and self.mask_transform:
+            image = self.color_transform(image)
+            attentioned_image = self.color_transform(attentioned_image)
+            mask = self.mask_transform(mask)
+            if self.debug: 
+                cv.imwrite('./test/transformed_original_img_debug.jpg', torch.Tensor.numpy(attentioned_image))
+                cv.imwrite('./test/transformed_mask_img_debug.jpg', torch.Tensor.numpy(mask))
+
         # our input to the image should be the rgb, attentioned image, and segmentation mask, ie H x W X 7
-        x = np.concatenate((image, attentioned_image, np.expand_dims(mask, axis=2)), axis=2, dtype='uint8')
+        x = torch.cat((image, attentioned_image, mask))
         return x, y_hat
 
     def find_corresponding_img(self, mask_path):
@@ -118,7 +119,7 @@ class Endovis23Dataset(Dataset):
     def apply_attention(self, image, mask):
         assert image.shape[0] == mask.shape[0] and image.shape[1] == mask.shape[1], 'dimensions of the image and mask should match'
         # an attention map should be [0, 1]
-        mask = np.stack((mask/255.0,)*3, axis=-1)
+        mask = np.stack((mask / 255.0,)*3, axis=-1)
         result = image * mask
         if self.debug:
             cv.imwrite('./test/original_rgb_debug.jpg', image)

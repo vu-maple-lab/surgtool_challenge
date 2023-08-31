@@ -265,7 +265,7 @@ def train(model, dataloaders, loss, optim, scheduler, epochs, logs_dir, debug=Fa
 
     # start training loop
     for i in range(epochs):
-        print(f"EPOCH: {i+1} / {epochs}")
+        print(f"EPOCH: {i+1}/{epochs}")
         train_results = train_one_epoch(model, dataloaders[0], loss, optim, scheduler, debug)
         test_results = test_one_epoch(model, dataloaders[1], loss, debug)
         log_results(train_loss, train_acc, test_loss, test_acc, train_results, test_results, debug)
@@ -292,32 +292,42 @@ def prepare_logs(logs_dir):
         os.mkdir(str(logs_dir / 'checkpoints'))
     if not (logs_dir / 'visualizations').exists():
         os.mkdir(str(logs_dir / 'visualizations'))
+    if not (logs_dir / 'metrics').exists():
+        os.mkdir(str(logs_dir / 'metrics'))
 
 def save_vis(logs_dir, logs):
+
+    # save numpy arrays
+    train_loss, train_acc, test_loss, test_acc = logs 
+    np.save(str(logs_dir / 'metrics' / 'training_loss.npy'), np.array(train_loss))
+    np.save(str(logs_dir / 'metrics' / 'training_acc.npy'), np.array(train_acc))
+    np.save(str(logs_dir / 'metrics' / 'testing_loss.npy'), np.array(test_loss))
+    np.save(str(logs_dir / 'metrics' / 'testing_acc.npy'), np.array(test_acc))
+
     # training loss 
     plt.plot(np.array(logs[0]))
     plt.title('Training loss vs. Epochs')
     plt.xlabel('Epochs')
     plt.ylabel('Training Loss')
-    plt.savefig(str(logs_dir / 'visusalizations' / 'training_loss.png'))
+    plt.savefig(str(logs_dir / 'visualizations' / 'training_loss.png'))
 
     # training accuracy 
     plt.plot(np.array(logs[1]))
     plt.title('Training Accuracy vs. Epochs')
     plt.xlabel('Epochs')
     plt.ylabel('Training Accuracy')
-    plt.savefig(str(logs_dir / 'visusalizations' / 'training_acc.png'))
+    plt.savefig(str(logs_dir / 'visualizations' / 'training_acc.png'))
 
     # testing loss 
     plt.plot(np.array(logs[2]))
     plt.title('Testing loss vs. Epochs')
     plt.xlabel('Epochs')
     plt.ylabel('Testing Loss')
-    plt.savefig(str(logs_dir / 'visusalizations' / 'testing_loss.png'))
+    plt.savefig(str(logs_dir / 'visualizations' / 'testing_loss.png'))
 
     # testing accuracy
     plt.plot(np.array(logs[3]))
     plt.title('Testing Accuracy vs. Epochs')
     plt.xlabel('Epochs')
     plt.ylabel('Testing Accuracy')
-    plt.savefig(str(logs_dir / 'visusalizations' / 'testing_acc.png'))
+    plt.savefig(str(logs_dir / 'visualizations' / 'testing_acc.png'))

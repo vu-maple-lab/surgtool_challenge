@@ -1,4 +1,3 @@
-import os
 import torch 
 import pandas as pd
 from torch.utils.data import Dataset
@@ -79,13 +78,18 @@ class Endovis23Dataset(Dataset):
         y_hat = self.get_one_hot(tool_label)
 
         # apply transformations if they exists
-        if self.color_transform and self.mask_transform:
+        if self.color_transform:
             image = self.color_transform(image)
             attentioned_image = self.color_transform(attentioned_image)
             mask = self.mask_transform(mask)
             if self.debug: 
-                cv.imwrite('./test/transformed_original_img_debug.jpg', torch.Tensor.numpy(attentioned_image))
-                cv.imwrite('./test/transformed_mask_img_debug.jpg', torch.Tensor.numpy(mask))
+                print(f'Confirming if we are transforming correctly...')
+                img1 = np.moveaxis(torch.Tensor.numpy(image), 0, -1)
+                a1 = np.moveaxis(torch.Tensor.numpy(attentioned_image), 0, -1)
+                mask1 = np.moveaxis(torch.Tensor.numpy(mask), 0, -1).squeeze()
+                cv.imwrite('./test/transformed_original_img_debug.jpg', img1)
+                cv.imwrite('./test/transformed_attentioned_img_debug.jpg', a1)
+                cv.imwrite('./test/transformed_mask_img_debug.jpg', mask1)
 
         # our input to the image should be the rgb, attentioned image, and segmentation mask, ie H x W X 7
         x = torch.cat((image, attentioned_image, mask))

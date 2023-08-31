@@ -2,9 +2,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from torchvision import transforms as T
-import numpy as np
 import argparse
-from PIL import Image
 from pathlib import Path
 import math
 import os

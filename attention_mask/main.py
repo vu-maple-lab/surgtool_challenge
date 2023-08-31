@@ -14,13 +14,13 @@ from models import ResNet
 from utils import train
 
 def main(args):
+
     # process command ling args
     data_dir = Path(args.input_dir)
     logs_dir = Path(args.logs) 
     epochs = args.num_epochs
     batch_size = args.batch_size
     debug = args.debug
-
 
     # path checking
     if not data_dir.exists():
@@ -34,18 +34,21 @@ def main(args):
         print(f'Batch size: {batch_size}')
 
     # augmentations to apply
-    transforms = T.Compose([T.ToPILImage(), 
-                            T.Resize(256), 
-                            T.CenterCrop(224),
-                            T.ToTensor(),
-                            T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
+    color_transforms = T.Compose([T.ToPILImage(), 
+                                  T.Resize(256), 
+                                  T.CenterCrop(224),
+                                  T.ToTensor(),
+                                  T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
+    
+    mask_transforms = T.Compose([T.ToPILImage(), 
+                                 T.Resize(256), 
+                                 T.CenterCrop(224),
+                                 T.ToTensor()])
     # define dataset
-    endovis_dataset = Endovis23Dataset(data_dir, debug, transforms=transforms)
+    train_dataset = Endovis23Dataset(data_dir, train=True, debug=debug, color_transforms=color_transforms, mask_transforms=mask_transforms)
+    test_dataset = Endovis23Dataset(data_dir, train=False, debug=debug, color_transforms=None, mask_transforms=None)
 
     # split train-test + define dataloader
-    train_length = int(0.7 * len(endovis_dataset))
-    test_length = len(endovis_dataset) - train_length
-    train_dataset, test_dataset = torch.utils.data.random_split(endovis_dataset, (train_length, test_length))
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
     test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
     

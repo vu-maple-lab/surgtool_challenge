@@ -1,9 +1,6 @@
 import numpy as np
 import torch
 import torch.nn as nn
-from torchvision import datasets
-from torchvision import transforms
-from torch.utils.data.sampler import SubsetRandomSampler
 
 class ResNet(nn.Module):
     

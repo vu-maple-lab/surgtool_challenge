@@ -11,12 +11,18 @@ from utils import TOOLS_ONE_HOT_ENCODING
 
 class Endovis23Dataset(Dataset):
 
-    def __init__(self, root_dir, debug=False, transforms=None):
-        self.transform = transforms
+    def __init__(self, root_dir, train=True, debug=False, color_transforms=None, mask_transforms=None):
+        self.color_transform = color_transforms
+        self.mask_transform = mask_transforms
         self.debug = debug
 
-        color_dir = root_dir / 'raw' / 'color'
-        mask_dir = root_dir / 'raw' / 'processed_mask'
+        if train:
+            color_dir = root_dir / 'actual' / 'train' / 'color'
+            mask_dir = root_dir / 'actual' / 'train' / 'mask'
+        else:
+            color_dir = root_dir / 'actual' / 'test' / 'color'
+            mask_dir = root_dir / 'actual' / 'test' / 'mask'
+
         labels_path = root_dir / 'labels.csv'
 
         if not (color_dir.exists() and mask_dir.exists() and labels_path.exists()):
@@ -45,9 +51,9 @@ class Endovis23Dataset(Dataset):
         image = self.find_corresponding_img(self.path_mask_imgs[idx])
 
         # first apply transformations if they exists
-        if self.transform:
-            image = self.transform(image)
-            mask = self.transform(mask)
+        if self.color_transform and self.mask_transforms:
+            image = self.color_transform(image)
+            mask = self.mask_transform(mask)
             if self.debug: 
                 cv.imwrite('./test/transformed_original_img_debug.jpg', image)
                 cv.imwrite('./test/transformed_mask_img_debug.jpg', mask)

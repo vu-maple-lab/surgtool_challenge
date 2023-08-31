@@ -75,6 +75,7 @@ def train_test_split(root_dir, split_val, debug):
 
             if debug:
                 print(f"command: {command}") 
+                
     print('All done!')
 
 # process_binary reads in mask image to denoise and encourage connectivity

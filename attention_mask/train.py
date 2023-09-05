@@ -8,7 +8,7 @@ import math
 import os
 from dataset import * 
 from models import ResNet
-from utils import train, prepare_logs, save_vis
+from utils import train, prepare_logs, save_vis, color_transforms, mask_transforms
 
 # python main.py --input_dir ../data/ --logs ../logs/ --num_epochs 25 --batch_size 8
 
@@ -31,16 +31,7 @@ def main(args):
     if debug:
         print(f'Num Epochs: {epochs}')
         print(f'Batch size: {batch_size}')
-
-    # augmentations to apply
-    color_transforms = T.Compose([T.ToPILImage(), 
-                                  T.Resize(512), 
-                                  T.ToTensor(),
-                                  T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
-    
-    mask_transforms = T.Compose([T.ToPILImage(), 
-                                 T.Resize(512), 
-                                 T.ToTensor()])
+        
     # define dataset
     train_dataset = Endovis23Dataset(data_dir, train=True, debug=debug, color_transforms=color_transforms, mask_transforms=mask_transforms)
     test_dataset = Endovis23Dataset(data_dir, train=False, debug=debug, color_transforms=color_transforms, mask_transforms=mask_transforms)

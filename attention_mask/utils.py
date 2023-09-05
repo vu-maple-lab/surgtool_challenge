@@ -2,6 +2,7 @@ import cv2 as cv
 import numpy as np
 import os 
 import torch 
+from torchvision import transforms as T
 from tqdm import tqdm
 import random
 from pathlib import Path
@@ -29,6 +30,16 @@ TOOLS_ONE_HOT_ENCODING = {
 INDEX_ONE_HOT_ENCODING = {v: k for k, v in TOOLS_ONE_HOT_ENCODING.items()}
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else 'cpu')
+
+# augmentations to apply
+color_transforms = T.Compose([T.ToPILImage(), 
+                                T.Resize(512), 
+                                T.ToTensor(),
+                                T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
+
+mask_transforms = T.Compose([T.ToPILImage(), 
+                                T.Resize(512), 
+                                T.ToTensor()])
 
 # train_test_split reads in a data directory with color and mask images and splits them 
 # according to split_val c (0, 1), into train/test directories to set up for training
@@ -285,6 +296,66 @@ def train(model, dataloaders, loss, optim, scheduler, epochs, logs_dir, debug=Fa
     torch.save(optim.state_dict(), str(logs_dir / 'checkpoints' / 'optimizer.pt'))
     torch.save(scheduler.state_dict(), str(logs_dir / 'checkpoints' / 'scheduler.pt'))
     return train_loss, train_acc, test_loss, test_acc
+
+def run_trial(model, dataloader, debug=False):
+    with torch.no_grad():
+        for i, (x, y_hat) in enumerate(tqdm(dataloader)):
+
+            # put it through model first 
+            y = model(x)
+            y_preds = torch.round(torch.sigmoid(y))
+            
+            orig_rgb, attentioned_img, mask = separate_x(torch.squeeze(x))
+
+            # TODO: compare n and m for robustness... unsure for now
+            n = torch.sum(y_hat)
+
+            # get a numpy, binary, uint8 mask first so we can run connected components
+            mask_binary = rescale_uint8_and_binarize(mask).numpy()
+            m, _, stats, _ = cv.connectedComponentsWithStats(mask_binary)
+            for label in range(m):
+
+                # skip background
+                if label == 0:
+                    continue 
+                
+                top_x, top_y, width, height = stats[label, :4]
+
+                # first apply mask to the segmentation mask
+                altered_mask = torch.clone(mask)
+                altered_mask[top_y:top_y+height, top_x:top_x + width] = 0.
+
+                # now apply masking to the attentioned image
+                altered_attentioned_img = torch.clone(attentioned_img)
+                altered_attentioned_img[:, top_y:top_y+height, top_x:top_x + width] = torch.zeros((3, height, width))
+                altered_x = torch.cat((orig_rgb, altered_attentioned_img, altered_mask))
+            
+                # run through model and compare! hehe
+                altered_y = model(torch.unsqueeze(altered_x, 0))
+                altered_y_preds = torch.round(torch.sigmoid(altered_y))
+                breakpoint()
+ 
+
+def rescale_uint8_and_binarize(x):
+    # rescale
+    assert len(x.shape) == 2, 'should be grayscale image'
+    x_min, x_max = x.min(), x.max()
+    x = (x - x_min) / (x_max - x_min) # scale to [0, 1]
+    x = (255.0 * x).to(torch.uint8)
+
+    # binarize 
+    x[x > 250] = 255
+    x[x <= 250] = 0
+    return x
+
+def separate_x(x):
+    # x shape: [7, H, W]
+    assert len(x.shape) == 3, 'should be a 3D structure'
+    original_color = x[:3,:,:] # color doesn't need to be permuted because we're not doing anything to it
+    attentioned_img = x[3:6,:,:]
+    mask = x[6,:,:]
+    return original_color, attentioned_img, mask
+
 
 # appends the results to the arrays and prints stuff out (mainly for readability in the main train function)
 def log_results(train_loss, train_acc, test_loss, test_acc, train_results, test_results, debug=False):

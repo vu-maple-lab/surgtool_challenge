@@ -28,6 +28,8 @@ TOOLS_ONE_HOT_ENCODING = {
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else 'cpu')
 
+# train_test_split reads in a data directory with color and mask images and splits them 
+# according to split_val c (0, 1), into train/test directories to set up for training
 def train_test_split(root_dir, split_val, debug):
     assert split_val < 1 and split_val > 0
     color_dir = root_dir / 'raw' / 'color'
@@ -151,7 +153,6 @@ def filter_segmentations(root_dir, debug):
             mask_path = '../data/raw/mask/011124_1559.jpg'
         img = cv.imread(mask_path)
         denoised_img = process_binary(img, debug)
-
         # check how large it is
         total_area = img.shape[0] * img.shape[1]
         white_pixel_area = np.sum(denoised_img == 255)
@@ -198,7 +199,9 @@ def filter_segmentations(root_dir, debug):
             print(f'The useful labels are: {useful_labels}')
             cv.imwrite('./test/new_mask_debug.jpg', new_mask)
             break 
-            
+
+# calc_accuracy just compares two vectors with 0s and 1s and calculates how
+# similar they are with simple averaging
 def calc_accuracy(y, y_hat):
     batch_size, num_classes = y_hat.shape
     running_avg = 0.
@@ -207,6 +210,7 @@ def calc_accuracy(y, y_hat):
         running_avg += (torch.sum(predictions == y_hat[i,:])) / num_classes
     return running_avg / batch_size
 
+# a general training function for one epoch 
 def train_one_epoch(model, dataloader, loss, optim, scheduler, debug=False):
     
     # set model to train
@@ -232,10 +236,11 @@ def train_one_epoch(model, dataloader, loss, optim, scheduler, debug=False):
     
     return running_loss / (i+1), running_acc / (i+1)
 
-
+# a general testing function for one epoch
 def test_one_epoch(model, dataloader, loss, debug=False):
     # set model to evaluation
     model.eval()
+
     # get metrics of our current performance during training
     running_loss = 0.
     running_acc = 0.
@@ -251,6 +256,7 @@ def test_one_epoch(model, dataloader, loss, debug=False):
     
     return running_loss / (i+1), running_acc / (i+1)
 
+# overall training function
 def train(model, dataloaders, loss, optim, scheduler, epochs, logs_dir, debug=False):
     
     # initialize log vectors 
@@ -278,15 +284,16 @@ def train(model, dataloaders, loss, optim, scheduler, epochs, logs_dir, debug=Fa
     torch.save(scheduler.state_dict(), str(logs_dir / 'checkpoints' / 'scheduler.pt'))
     return train_loss, train_acc, test_loss, test_acc
 
-
+# appends the results to the arrays and prints stuff out (mainly for readability in the main train function)
 def log_results(train_loss, train_acc, test_loss, test_acc, train_results, test_results, debug=False):
     print(f'Training Loss: {train_results[0]} Testing Loss: {test_results[0]}')
     print(f'Training Accuracy: {train_results[1]} Testing Accuracy: {test_results[1]}')
     train_loss.append(train_results[0])
-    train_acc.append(train_results[1])
+    train_acc.append(train_results[1].cpu().item())
     test_loss.append(test_results[0])
-    test_acc.append(test_results[1])
+    test_acc.append(test_results[1].cpu().item())
 
+# function that makes log/ directory for output
 def prepare_logs(logs_dir):
     if not (logs_dir / 'checkpoints').exists():
         os.mkdir(str(logs_dir / 'checkpoints'))
@@ -295,6 +302,7 @@ def prepare_logs(logs_dir):
     if not (logs_dir / 'metrics').exists():
         os.mkdir(str(logs_dir / 'metrics'))
 
+# saves the metrics as images to show your professors you're doing good work
 def save_vis(logs_dir, logs):
 
     # save numpy arrays
@@ -305,28 +313,32 @@ def save_vis(logs_dir, logs):
     np.save(str(logs_dir / 'metrics' / 'testing_acc.npy'), np.array(test_acc))
 
     # training loss 
-    plt.plot(np.array(logs[0]))
+    plt.figure()
+    plt.plot(np.array(train_loss))
     plt.title('Training loss vs. Epochs')
     plt.xlabel('Epochs')
     plt.ylabel('Training Loss')
     plt.savefig(str(logs_dir / 'visualizations' / 'training_loss.png'))
 
     # training accuracy 
-    plt.plot(np.array(logs[1]))
+    plt.figure()
+    plt.plot(np.array(train_acc))
     plt.title('Training Accuracy vs. Epochs')
     plt.xlabel('Epochs')
     plt.ylabel('Training Accuracy')
     plt.savefig(str(logs_dir / 'visualizations' / 'training_acc.png'))
 
     # testing loss 
-    plt.plot(np.array(logs[2]))
+    plt.figure()
+    plt.plot(np.array(test_loss))
     plt.title('Testing loss vs. Epochs')
     plt.xlabel('Epochs')
     plt.ylabel('Testing Loss')
     plt.savefig(str(logs_dir / 'visualizations' / 'testing_loss.png'))
 
     # testing accuracy
-    plt.plot(np.array(logs[3]))
+    plt.figure()
+    plt.plot(np.array(test_acc))
     plt.title('Testing Accuracy vs. Epochs')
     plt.xlabel('Epochs')
     plt.ylabel('Testing Accuracy')

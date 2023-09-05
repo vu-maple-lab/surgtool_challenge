@@ -10,6 +10,8 @@ from dataset import *
 from models import ResNet
 from utils import train, prepare_logs, save_vis
 
+# python main.py --input_dir ../data/ --logs ../logs/ --num_epochs 25 --batch_size 8
+
 def main(args):
 
     # process command ling args
@@ -67,6 +69,7 @@ def main(args):
     # train + test
     logs = train(model, (train_dataloader, test_dataloader), loss, optim, scheduler, epochs, logs_dir, debug)
     save_vis(logs_dir, logs)
+    print(f'Finished Training! Logs saved to {str(logs_dir)}')
 
 
 if __name__ == '__main__':

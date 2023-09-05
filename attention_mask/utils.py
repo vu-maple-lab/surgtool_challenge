@@ -26,6 +26,8 @@ TOOLS_ONE_HOT_ENCODING = {
     'grasping retractor': 13
 }
 
+INDEX_ONE_HOT_ENCODING = {v: k for k, v in TOOLS_ONE_HOT_ENCODING.items()}
+
 device = torch.device("cuda:0" if torch.cuda.is_available() else 'cpu')
 
 # train_test_split reads in a data directory with color and mask images and splits them 

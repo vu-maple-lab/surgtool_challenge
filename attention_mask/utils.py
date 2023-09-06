@@ -10,6 +10,7 @@ import glob
 from natsort import natsorted
 import matplotlib.pyplot as plt 
 
+
 TOOLS_ONE_HOT_ENCODING = {
     'needle driver': 0,
     'monopolar curved scissors': 1, 
@@ -311,8 +312,14 @@ def run_trial(model, dataloader, debug=False):
             n = torch.sum(y_hat)
 
             # get a numpy, binary, uint8 mask first so we can run connected components
-            mask_binary = rescale_uint8_and_binarize(mask).numpy()
+            mask_binary = rescale_uint8_and_binarize(mask)
             m, _, stats, _ = cv.connectedComponentsWithStats(mask_binary)
+            if debug:
+                cv.imwrite('./test/binary_mask_before_trial_debug.jpg', mask_binary)
+                print(f'num_labels GT n = {n}')
+                print(f'num_labels pred m = {m - 1}')
+                print(f'The ground truth is: {y_hat}')
+                print(f'The original output is {y[0]}')
             for label in range(m):
 
                 # skip background
@@ -323,17 +330,22 @@ def run_trial(model, dataloader, debug=False):
 
                 # first apply mask to the segmentation mask
                 altered_mask = torch.clone(mask)
-                altered_mask[top_y:top_y+height, top_x:top_x + width] = 0.
+                altered_mask[top_y:top_y+height, top_x:top_x + width] = torch.zeros((height, width))
 
                 # now apply masking to the attentioned image
                 altered_attentioned_img = torch.clone(attentioned_img)
                 altered_attentioned_img[:, top_y:top_y+height, top_x:top_x + width] = torch.zeros((3, height, width))
-                altered_x = torch.cat((orig_rgb, altered_attentioned_img, altered_mask))
+
+                # apply transformations to our new mask
+                altered_x = torch.cat((orig_rgb, altered_attentioned_img, torch.unsqueeze(altered_mask, 0)))
             
                 # run through model and compare! hehe
                 altered_y = model(torch.unsqueeze(altered_x, 0))
                 altered_y_preds = torch.round(torch.sigmoid(altered_y))
-                breakpoint()
+
+                if debug:
+                    print(f'The altered output is {altered_y[0]}')
+            breakpoint()
  
 
 def rescale_uint8_and_binarize(x):
@@ -346,7 +358,7 @@ def rescale_uint8_and_binarize(x):
     # binarize 
     x[x > 250] = 255
     x[x <= 250] = 0
-    return x
+    return x.numpy()
 
 def separate_x(x):
     # x shape: [7, H, W]

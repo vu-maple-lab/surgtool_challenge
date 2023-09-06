@@ -79,7 +79,7 @@ class Endovis23Dataset(Dataset):
 
         # apply transformations if they exists
         if self.color_transform:
-            image = self.color_transform(image)
+            # image = self.color_transform(image)
             attentioned_image = self.color_transform(attentioned_image)
             mask = self.mask_transform(mask)
             if self.debug: 
@@ -92,7 +92,8 @@ class Endovis23Dataset(Dataset):
                 cv.imwrite('./test/transformed_mask_img_debug.jpg', mask1)
 
         # our input to the image should be the rgb, attentioned image, and segmentation mask, ie H x W X 7
-        x = torch.cat((image, attentioned_image, mask))
+        # x = torch.cat((image, attentioned_image, mask))
+        x = torch.cat((attentioned_image, mask))
         return x, y_hat
 
     def find_corresponding_img(self, mask_path):

@@ -10,7 +10,7 @@ from dataset import *
 from models import ResNet
 from utils import train, prepare_logs, save_vis, color_transforms, mask_transforms
 
-# python main.py --input_dir ../data/ --logs ../logs/ --num_epochs 25 --batch_size 8
+# python train.py --input_dir ../data/ --logs ../logs/ --num_epochs 25 --batch_size 8
 
 def main(args):
 
@@ -31,7 +31,7 @@ def main(args):
     if debug:
         print(f'Num Epochs: {epochs}')
         print(f'Batch size: {batch_size}')
-        
+
     # define dataset
     train_dataset = Endovis23Dataset(data_dir, train=True, debug=debug, color_transforms=color_transforms, mask_transforms=mask_transforms)
     test_dataset = Endovis23Dataset(data_dir, train=False, debug=debug, color_transforms=color_transforms, mask_transforms=mask_transforms)

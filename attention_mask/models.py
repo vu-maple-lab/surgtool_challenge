@@ -4,7 +4,7 @@ import torch.nn as nn
 
 class ResNet(nn.Module):
     
-    def __init__(self, in_channels=7, num_classes=14):
+    def __init__(self, in_channels=4, num_classes=14):
         super().__init__()
         self.resnet = torch.hub.load('pytorch/vision:v0.10.0', 'resnet101', pretrained=True)
         self.resnet.conv1 = nn.Conv2d(in_channels, 64, kernel_size=(7,7), stride=(2,2), padding=(3,3), bias=False)

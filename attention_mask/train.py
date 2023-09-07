@@ -20,12 +20,17 @@ def main(args):
     epochs = args.num_epochs
     batch_size = args.batch_size
     debug = args.debug
+    pretrained = args.pretrained
 
     # path checking
     if not data_dir.exists():
         raise Exception("data directory does not exist")
     if not logs_dir.exists():
         raise Exception("logs directory does not exist")
+    if pretrained:
+        pretrained = Path(pretrained)
+        if not pretrained.exists():
+            raise Exception("pretrained path does not exist")
     if debug and not os.path.exists('./test'):
         os.mkdir('./test')
     if debug:
@@ -46,16 +51,34 @@ def main(args):
 
     # define model and freeze parameters
     model = ResNet()
-    for name, param in model.named_parameters():
-        if "last_layer" in name or "resnet.conv1" in name:
-            continue
-        param.requires_grad = False   
-
     # define our loss function and optimizer
     loss = nn.BCEWithLogitsLoss()
     optim = torch.optim.SGD(model.parameters(), lr=1.)
     steps = math.floor(len(train_dataset) / batch_size)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optim, steps)
+
+    if pretrained:
+        try:
+            print('Loading in pretrained model, optimizer, and scheduler...')
+            
+            model_path = str(pretrained / 'checkpoints' / 'best_model.pt')
+            model.load_state_dict(torch.load(model_path))
+
+            # load optimizer and scheduler
+            optim_path = str(pretrained / 'checkpoints' / 'optimizer.pt')
+            optim.load_state_dict(torch.load(optim_path))
+
+            sched_path = str(pretrained / 'checkpoints' / 'scheduler.pt')
+            scheduler.load_state_dict(torch.load(sched_path))
+
+        except Exception:
+            print('ERROR: one of the pretrained paths does not exist')
+            return 
+
+    for name, param in model.named_parameters():
+        if "last_layer" in name or "resnet.conv1" in name:
+            continue
+        param.requires_grad = False   
 
     # train + test
     logs = train(model, (train_dataloader, test_dataloader), loss, optim, scheduler, epochs, logs_dir, debug)
@@ -67,6 +90,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--input_dir', required=True)
     parser.add_argument('--logs', required=True)
+    parser.add_argument('--pretrained')
     parser.add_argument('--num_epochs', default=50, type=int, required=True)
     parser.add_argument('--batch_size', default=4, type=int, required=True)
     parser.add_argument('--debug', action='store_true')

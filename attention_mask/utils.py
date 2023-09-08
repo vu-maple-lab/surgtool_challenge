@@ -27,7 +27,7 @@ TOOLS_ONE_HOT_ENCODING = {
     'grasping retractor': 13
 }
 
-INDEX_ONE_HOT_ENCODING = TOOLS_ONE_HOT_ENCODING.keys()
+INDEX_ONE_HOT_ENCODING = list(TOOLS_ONE_HOT_ENCODING.keys())
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else 'cpu')
 
@@ -302,15 +302,19 @@ def run_trial(model, dataloader, debug=False):
         for i, (x, y_hat) in enumerate(tqdm(dataloader)):
 
             # put it through model first 
-            y = model(x)            
+            x = x.to(device).float()
+            y = model(x)
             orig_rgb, attentioned_img, mask = separate_x(torch.squeeze(x))
 
             # TODO: compare n and m for robustness... unsure for now
             n = torch.sum(y_hat)
 
             # get a numpy, binary, uint8 mask first so we can run connected components
-            mask_binary = rescale_uint8_and_binarize(mask).numpy()
+            mask_binary = rescale_uint8_and_binarize(mask).cpu().numpy()
             m, _, stats, _ = cv.connectedComponentsWithStats(mask_binary)
+            
+            overlayed_img = rescale_uint8(orig_rgb.cpu())
+            overlayed_img = np.moveaxis(overlayed_img, 0, -1)
 
             if debug:
                 print(f'num_labels GT n = {n}')
@@ -347,6 +351,18 @@ def run_trial(model, dataloader, debug=False):
 
                 if debug:
                     print(f'The predicted output is: {altered_y[0]}')
+                
+                # the maximum of altered_y should be the prediction of the bounding box
+                classification_pred = INDEX_ONE_HOT_ENCODING[torch.argmax(altered_y).item()]
+                
+                # get bounding box
+                top_x, top_y, width, height = stats[label, :4]
+
+                bb_boundaries = extract_clevis_bb(top_x, top_y, width, height)
+                overlayed_img = overlay_bbs(overlayed_img.copy(), classification_pred, bb_boundaries)
+
+            if debug:
+                cv.imwrite("./test/result.jpg", overlayed_img)
                 breakpoint()
 
                 # THIS IS CODE TO MASK OUT ONE AT A TIME. 
@@ -366,7 +382,34 @@ def run_trial(model, dataloader, debug=False):
                 # altered_y_preds = torch.round(torch.sigmoid(altered_y))
                 # breakpoint()
  
+def overlay_bbs(img, pred, bb):
 
+    # draw the bounding box 
+    top_pt = (int(bb[0]), int(bb[1]))
+    bottom_pt = (int(bb[0] + bb[2]), int(bb[1] + bb[3]))
+    img = cv.rectangle(img, top_pt, bottom_pt, (0, 255, 0), 2)
+
+    # draw the text 
+    text_loc = (int(bb[0] + 10), int(bb[1] + 30))
+    img = cv.putText(img, pred, text_loc, cv.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 1, cv.LINE_AA)
+
+    return img
+
+
+def extract_clevis_bb(top_x, top_y, width, height):
+    # top_x = top_x + (width / 4)
+    # top_y = top_y + (height / 4)
+    width = 3 * width / 5
+    height = 3 * height / 5
+    return top_x, top_y, width, height
+
+def rescale_uint8(x):
+    result = np.copy(x)
+    x_min, x_max = x.min(), x.max()
+    result = (x - x_min) / (x_max - x_min) # scale to [0, 1]
+    result = (255.0 * result).cpu().numpy().astype(np.uint8)
+    return result
+    
 def rescale_uint8_and_binarize(x):
     # rescale
     assert len(x.shape) == 2, 'should be grayscale image'

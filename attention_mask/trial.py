@@ -7,7 +7,7 @@ import math
 import os
 from dataset import * 
 from models import ResNet
-from utils import run_trial, color_transforms, mask_transforms
+from utils import run_trial, color_transforms, mask_transforms, device
 
 # python trial.py --input_dir ../data/ --model_path ../logs/checkpoints/best_model.pt --output ../output/ --debug
 
@@ -43,6 +43,7 @@ def main(args):
         model.load_state_dict(torch.load(model_path))
     except Exception:
         print("Invalid model path.")
+    model.to(device)
     model.eval()
 
     # define our loss function and optimizer

@@ -7,7 +7,7 @@ import math
 import os
 from dataset import * 
 from models import ResNet
-from utils import prepare_logs, run_trial, color_transforms, mask_transforms
+from utils import run_trial, color_transforms, mask_transforms
 
 # python trial.py --input_dir ../data/ --model_path ../logs/checkpoints/best_model.pt --output ../output/ --debug
 

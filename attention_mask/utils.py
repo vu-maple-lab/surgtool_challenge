@@ -27,7 +27,7 @@ TOOLS_ONE_HOT_ENCODING = {
     'grasping retractor': 13
 }
 
-INDEX_ONE_HOT_ENCODING = {v: k for k, v in TOOLS_ONE_HOT_ENCODING.items()}
+INDEX_ONE_HOT_ENCODING = TOOLS_ONE_HOT_ENCODING.keys()
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else 'cpu')
 
@@ -302,9 +302,7 @@ def run_trial(model, dataloader, debug=False):
         for i, (x, y_hat) in enumerate(tqdm(dataloader)):
 
             # put it through model first 
-            y = model(x)
-            y_preds = torch.round(torch.sigmoid(y))
-            
+            y = model(x)            
             orig_rgb, attentioned_img, mask = separate_x(torch.squeeze(x))
 
             # TODO: compare n and m for robustness... unsure for now
@@ -313,27 +311,60 @@ def run_trial(model, dataloader, debug=False):
             # get a numpy, binary, uint8 mask first so we can run connected components
             mask_binary = rescale_uint8_and_binarize(mask).numpy()
             m, _, stats, _ = cv.connectedComponentsWithStats(mask_binary)
+
+            if debug:
+                print(f'num_labels GT n = {n}')
+                print(f'num_labels pred m = {m - 1}')
+                print(f'The ground truth is: {y_hat}')
+                print(f'The original output is {y[0]}')
+
             for label in range(m):
 
                 # skip background
                 if label == 0:
                     continue 
+                print(f'current label to keep: {label}')
                 
-                top_x, top_y, width, height = stats[label, :4]
-
-                # first apply mask to the segmentation mask
+                # THIS IS CODE TO MASK EVERY OTHER TOOL
                 altered_mask = torch.clone(mask)
-                altered_mask[top_y:top_y+height, top_x:top_x + width] = 0.
-
-                # now apply masking to the attentioned image
                 altered_attentioned_img = torch.clone(attentioned_img)
-                altered_attentioned_img[:, top_y:top_y+height, top_x:top_x + width] = torch.zeros((3, height, width))
-                altered_x = torch.cat((orig_rgb, altered_attentioned_img, altered_mask))
-            
-                # run through model and compare! hehe
+
+                for other_label in range(m):
+
+                    # skip background + current tool
+                    if other_label == 0 or other_label == label:
+                        continue 
+                    
+                    if debug:
+                        print(f'Other label: {other_label}')
+
+                    top_x, top_y, width, height = stats[other_label, :4]
+                    altered_mask[top_y:top_y+height, top_x:top_x + width] = 0.
+                    altered_attentioned_img[:, top_y:top_y+height, top_x:top_x + width] = torch.zeros((3, height, width))
+
+                altered_x = torch.cat((orig_rgb, altered_attentioned_img, torch.unsqueeze(altered_mask, 0)))
                 altered_y = model(torch.unsqueeze(altered_x, 0))
-                altered_y_preds = torch.round(torch.sigmoid(altered_y))
+
+                if debug:
+                    print(f'The predicted output is: {altered_y[0]}')
                 breakpoint()
+
+                # THIS IS CODE TO MASK OUT ONE AT A TIME. 
+                # top_x, top_y, width, height = stats[label, :4]
+
+                # # first apply mask to the segmentation mask
+                # altered_mask = torch.clone(mask)
+                # altered_mask[top_y:top_y+height, top_x:top_x + width] = 0.
+
+                # # now apply masking to the attentioned image
+                # altered_attentioned_img = torch.clone(attentioned_img)
+                # altered_attentioned_img[:, top_y:top_y+height, top_x:top_x + width] = torch.zeros((3, height, width))
+                # altered_x = torch.cat((orig_rgb, altered_attentioned_img, altered_mask))
+            
+                # # run through model and compare! hehe
+                # altered_y = model(torch.unsqueeze(altered_x, 0))
+                # altered_y_preds = torch.round(torch.sigmoid(altered_y))
+                # breakpoint()
  
 
 def rescale_uint8_and_binarize(x):

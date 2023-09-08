@@ -298,15 +298,41 @@ def train(model, dataloaders, loss, optim, scheduler, epochs, logs_dir, debug=Fa
     torch.save(scheduler.state_dict(), str(logs_dir / 'checkpoints' / 'scheduler.pt'))
     return train_loss, train_acc, test_loss, test_acc
 
+def get_attention_mask( mask, r):
+    assert len(mask.shape) == 2, 'your mask should be some binary or grayscale image not color'
+    kernel = np.ones((r,r),np.float32) / (r ** 2)
+    blurred_img = cv.filter2D(mask, -1, kernel)
+    return blurred_img
+
+def apply_attention( image, mask):
+    assert image.shape[0] == mask.shape[0] and image.shape[1] == mask.shape[1], 'dimensions of the image and mask should match'
+    # an attention map should be [0, 1]
+    mask = np.stack((mask / 255.0,)*3, axis=-1)
+    result = image * mask
+    return result.astype('uint8')
+
+def get_x(image, mask):
+    if len(mask.shape == 3):
+        mask = np.uint8(np.dot(mask[...,:3], [0.2989, 0.5870, 0.1140])) # ensure that we have a 1 channel, uint8 mask 
+    
+    r = 15
+    attn_mask = get_attention_mask(mask, r)
+    attentioned_image = apply_attention(image, attn_mask)
+
+    image = color_transforms(image)
+    attentioned_image = color_transforms(attentioned_image)
+    mask = mask_transforms(mask)
+    return torch.cat((attentioned_image, mask))
+
+
 def run_trial(model, dataloader, debug=False):
     with torch.no_grad():
         for i, (x, y_hat) in enumerate(tqdm(dataloader)):
 
             # put it through model first 
-            y = model(x)
+            y = model(x)            
             y_preds = torch.round(torch.sigmoid(y))
-            
-            orig_rgb, attentioned_img, mask = separate_x(torch.squeeze(x))
+            attentioned_img, mask = separate_x(torch.squeeze(x))
 
             # TODO: compare n and m for robustness... unsure for now
             n = torch.sum(y_hat)
@@ -314,38 +340,64 @@ def run_trial(model, dataloader, debug=False):
             # get a numpy, binary, uint8 mask first so we can run connected components
             mask_binary = rescale_uint8_and_binarize(mask)
             m, _, stats, _ = cv.connectedComponentsWithStats(mask_binary)
+
             if debug:
-                cv.imwrite('./test/binary_mask_before_trial_debug.jpg', mask_binary)
                 print(f'num_labels GT n = {n}')
                 print(f'num_labels pred m = {m - 1}')
                 print(f'The ground truth is: {y_hat}')
                 print(f'The original output is {y[0]}')
+                print(f'The original prediction is {y_preds}')
+
             for label in range(m):
 
                 # skip background
                 if label == 0:
                     continue 
+                print(f'current label to keep: {label}')
                 
-                top_x, top_y, width, height = stats[label, :4]
-
-                # first apply mask to the segmentation mask
+                # THIS IS CODE TO MASK EVERY OTHER TOOL
                 altered_mask = torch.clone(mask)
-                altered_mask[top_y:top_y+height, top_x:top_x + width] = torch.zeros((height, width))
-
-                # now apply masking to the attentioned image
                 altered_attentioned_img = torch.clone(attentioned_img)
-                altered_attentioned_img[:, top_y:top_y+height, top_x:top_x + width] = torch.zeros((3, height, width))
 
-                # apply transformations to our new mask
-                altered_x = torch.cat((orig_rgb, altered_attentioned_img, torch.unsqueeze(altered_mask, 0)))
-            
-                # run through model and compare! hehe
+                for other_label in range(m):
+
+                    # skip background + current tool
+                    if other_label == 0 or other_label == label:
+                        continue 
+                    
+                    if debug:
+                        print(f'Other label: {other_label}')
+
+                    top_x, top_y, width, height = stats[other_label, :4]
+                    altered_mask[top_y:top_y+height, top_x:top_x + width] = 0.
+                    altered_attentioned_img[:, top_y:top_y+height, top_x:top_x + width] = torch.zeros((3, height, width))
+
+                altered_x = torch.cat((altered_attentioned_img, torch.unsqueeze(altered_mask, 0)))
                 altered_y = model(torch.unsqueeze(altered_x, 0))
-                altered_y_preds = torch.round(torch.sigmoid(altered_y))
 
                 if debug:
-                    print(f'The altered output is {altered_y[0]}')
-            breakpoint()
+                    print(f'The predicted output is: {altered_y[0]}')
+                    altered_y_preds = torch.round(torch.sigmoid(altered_y))
+                    print(f'The altered y prediction is {altered_y_preds}')
+                    
+                breakpoint()
+
+                # THIS IS CODE TO MASK OUT ONE AT A TIME. 
+                # top_x, top_y, width, height = stats[label, :4]
+
+                # # first apply mask to the segmentation mask
+                # altered_mask = torch.clone(mask)
+                # altered_mask[top_y:top_y+height, top_x:top_x + width] = 0.
+
+                # # now apply masking to the attentioned image
+                # altered_attentioned_img = torch.clone(attentioned_img)
+                # altered_attentioned_img[:, top_y:top_y+height, top_x:top_x + width] = torch.zeros((3, height, width))
+                # altered_x = torch.cat((orig_rgb, altered_attentioned_img, altered_mask))
+            
+                # # run through model and compare! hehe
+                # altered_y = model(torch.unsqueeze(altered_x, 0))
+                # altered_y_preds = torch.round(torch.sigmoid(altered_y))
+                # breakpoint()
  
 
 def rescale_uint8_and_binarize(x):
@@ -363,10 +415,9 @@ def rescale_uint8_and_binarize(x):
 def separate_x(x):
     # x shape: [7, H, W]
     assert len(x.shape) == 3, 'should be a 3D structure'
-    original_color = x[:3,:,:] # color doesn't need to be permuted because we're not doing anything to it
-    attentioned_img = x[3:6,:,:]
-    mask = x[6,:,:]
-    return original_color, attentioned_img, mask
+    attentioned_img = x[:3,:,:]
+    mask = x[3,:,:]
+    return attentioned_img, mask
 
 
 # appends the results to the arrays and prints stuff out (mainly for readability in the main train function)

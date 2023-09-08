@@ -84,10 +84,8 @@ class Endovis23Dataset(Dataset):
             mask = self.mask_transform(mask)
             if self.debug: 
                 print(f'Confirming if we are transforming correctly...')
-                img1 = np.moveaxis(torch.Tensor.numpy(image), 0, -1)
                 a1 = np.moveaxis(torch.Tensor.numpy(attentioned_image), 0, -1)
                 mask1 = np.moveaxis(torch.Tensor.numpy(mask), 0, -1).squeeze()
-                cv.imwrite('./test/transformed_original_img_debug.jpg', img1)
                 cv.imwrite('./test/transformed_attentioned_img_debug.jpg', a1)
                 cv.imwrite('./test/transformed_mask_img_debug.jpg', mask1)
 

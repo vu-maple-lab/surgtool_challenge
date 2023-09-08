@@ -19,6 +19,7 @@ def main(args):
     output_path = Path(args.output)
     debug = args.debug
     batch_size = 1 # enforced for trial phase
+    
     # path checking
     if not data_dir.exists():
         raise Exception("data directory does not exist")

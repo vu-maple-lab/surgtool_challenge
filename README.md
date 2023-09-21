@@ -12,7 +12,7 @@ Precise tracking and identification of instruments during a robotic surgery is e
 ## Method
 First, we used a endoscopic tool binary segmentation model from EndoVis17, called the [TernausNet](https://github.com/ternaus/robot-surgery-segmentation). Using the original color image and its respective binary mask, we finetuned a pretrained ResNet101 model to correctly classify which tools are in the frame. We call this the "Training Phase".
 
-<img src="figs/training_phase.png" alt="drawing" width="800"/>
+<img src="figs/training_phase.png" alt="drawing" width="600"/>
 
 After the training was complete, the ResNet model was used for the second "Trial Phase." To correctly classify a tool, every other tool was masked out, and the model was inferenced again. We compared the output scores when the other tools were masked out and when they were not. 
 

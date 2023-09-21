@@ -16,13 +16,13 @@ class Endovis23Dataset(Dataset):
         self.debug = debug
 
         if train:
-            color_dir = root_dir / 'actual' / 'train' / 'color'
-            mask_dir = root_dir / 'actual' / 'train' / 'mask'
+            color_dir = root_dir / 'train' / 'color'
+            mask_dir = root_dir / 'train' / 'mask'
         else:
-            color_dir = root_dir / 'actual' / 'test' / 'color'
-            mask_dir = root_dir / 'actual' / 'test' / 'mask'
+            color_dir = root_dir / 'test' / 'color'
+            mask_dir = root_dir / 'test' / 'mask'
 
-        labels_path = root_dir / 'labels.csv'
+        labels_path = root_dir / 'training_data' / 'labels.csv'
 
         if not (color_dir.exists() and mask_dir.exists() and labels_path.exists()):
             raise Exception("Your input_dir must include a labels.csv and a raw/ file with color/ and mask/ inside")

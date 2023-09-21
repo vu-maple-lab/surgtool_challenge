@@ -410,6 +410,7 @@ def run_trial(model, dataloader, debug=False):
             # put it through model first 
             x = x.to(device).float()
             y = model(x)
+            preds = torch.round(torch.sigmoid(y))
             orig_rgb, attentioned_img, mask = separate_x(torch.squeeze(x))
 
             # TODO: compare n and m for robustness... unsure for now
@@ -427,7 +428,9 @@ def run_trial(model, dataloader, debug=False):
                 print(f'num_labels pred m = {m - 1}')
                 print(f'The ground truth is: {y_hat}')
                 print(f'The original output is {y[0]}')
-
+            if m != 4:
+                continue 
+            print('THREE')
             for label in range(m):
 
                 # skip background
@@ -439,27 +442,47 @@ def run_trial(model, dataloader, debug=False):
                 altered_mask = torch.clone(mask)
                 altered_attentioned_img = torch.clone(attentioned_img)
 
-                for other_label in range(m):
+                # METHOD 1
+                # for other_label in range(m):
 
-                    # skip background + current tool
-                    if other_label == 0 or other_label == label:
-                        continue 
+                #     # skip background + current tool
+                #     if other_label == 0 or other_label == label:
+                #         continue 
                     
-                    if debug:
-                        print(f'Other label: {other_label}')
+                #     if debug:
+                #         print(f'Other label: {other_label}')
 
-                    top_x, top_y, width, height = stats[other_label, :4]
-                    altered_mask[top_y:top_y+height, top_x:top_x + width] = 0.
-                    altered_attentioned_img[:, top_y:top_y+height, top_x:top_x + width] = torch.zeros((3, height, width))
+                #     top_x, top_y, width, height = stats[other_label, :4]
+                #     altered_mask[top_y:top_y+height, top_x:top_x + width] = 0.
+                #     altered_attentioned_img[:, top_y:top_y+height, top_x:top_x + width] = 0.
+                # altered_x = torch.cat((orig_rgb, altered_attentioned_img, torch.unsqueeze(altered_mask, 0)))
+                # altered_y = model(torch.unsqueeze(altered_x, 0))
+
+                # METHOD 2
+                top_x, top_y, width_, height_ = stats[label, :4]
+                altered_mask[top_y:top_y+height_, top_x:top_x + width_] = 0.
+                altered_attentioned_img[:, top_y:top_y+height_, top_x:top_x + width_] = 0.
 
                 altered_x = torch.cat((orig_rgb, altered_attentioned_img, torch.unsqueeze(altered_mask, 0)))
-                altered_y = model(torch.unsqueeze(altered_x, 0))
+                altered_x = torch.unsqueeze(altered_x, 0).to(device)
+                altered_y = model(altered_x)
+                    
+                winner_index = -1
 
+                for j, val in enumerate(preds[0].cpu().numpy().tolist()): 
+                    if val == 1: 
+                        if winner_index == -1:
+                            winner_index = j
+                        else:
+                            if altered_y[0][j] < y[0][j]:
+                                winner_index = j 
+                classification_pred = INDEX_ONE_HOT_ENCODING[winner_index]
+                
                 if debug:
                     print(f'The predicted output is: {altered_y[0]}')
                 
                 # the maximum of altered_y should be the prediction of the bounding box
-                classification_pred = INDEX_ONE_HOT_ENCODING[torch.argmax(altered_y).item()]
+                # classification_pred = INDEX_ONE_HOT_ENCODING[torch.argmax(altered_y).item()]
                 
                 # get bounding box
                 top_x, top_y, width, height = stats[label, :4]

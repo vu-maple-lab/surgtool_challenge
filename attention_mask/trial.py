@@ -15,7 +15,7 @@ def main(args):
 
     # process command ling args
     data_dir = Path(args.input_dir)
-    model_path = Path(args.model_path)
+    model_path = Path(args.model_dir)
     output_path = Path(args.output)
     debug = args.debug
     batch_size = 1 # enforced for trial phase
@@ -47,13 +47,12 @@ def main(args):
     model.eval()
 
     # define our loss function and optimizer
-    loss = nn.BCEWithLogitsLoss()
     results = run_trial(model, dataloader, debug)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--input_dir', required=True)
-    parser.add_argument('--model_path', required=True)
+    parser.add_argument('--model_dir', required=True)
     parser.add_argument('--output', required=True)
     parser.add_argument('--debug', action='store_true')
 

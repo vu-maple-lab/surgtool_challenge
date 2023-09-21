@@ -403,7 +403,11 @@ def train(model, dataloaders, loss, optim, scheduler, epochs, logs_dir, debug=Fa
     torch.save(scheduler.state_dict(), str(logs_dir / 'checkpoints' / 'scheduler.pt'))
     return train_loss, train_acc, test_loss, test_acc
 
-def run_trial(model, dataloader, debug=False):
+def run_trial(model, dataloader, output_path, debug=False):
+
+    original_height, original_width = 720, 1280
+    all_frames_predicted_outputs = []
+
     with torch.no_grad():
         for i, (x, y_hat) in enumerate(tqdm(dataloader)):
 
@@ -428,15 +432,13 @@ def run_trial(model, dataloader, debug=False):
                 print(f'num_labels pred m = {m - 1}')
                 print(f'The ground truth is: {y_hat}')
                 print(f'The original output is {y[0]}')
-            if m != 4:
-                continue 
-            print('THREE')
+
+            solutions = []
             for label in range(m):
 
                 # skip background
                 if label == 0:
                     continue 
-                print(f'current label to keep: {label}')
                 
                 # THIS IS CODE TO MASK EVERY OTHER TOOL
                 altered_mask = torch.clone(mask)
@@ -487,29 +489,37 @@ def run_trial(model, dataloader, debug=False):
                 # get bounding box
                 top_x, top_y, width, height = stats[label, :4]
 
-                bb_boundaries = extract_clevis_bb(top_x, top_y, width, height)
+                bb_boundaries = extract_clevis_bb(top_x, top_y, width, height, (original_height, original_width))
                 overlayed_img = overlay_bbs(overlayed_img.copy(), classification_pred, bb_boundaries)
+
+                top_x, top_y, width_, height_ = bb_boundaries
+                name = f'slice_nr_{i}_' + classification_pred
+                bbox = [[top_x, top_y, 0.5], 
+                            [top_x + width_, top_y, 0.5], 
+                            [top_x + width_, top_y + height_, 0.5],
+                            [top_x, top_y + height_, 0.5]]
+                score = torch.sigmoid(y[0])[winner_index]
+                pred_description = {"corners": bbox, "name": name, "probability": score.item()}
+                solutions.append(pred_description)
 
             if debug:
                 cv.imwrite("./test/result.jpg", overlayed_img)
                 breakpoint()
-
-                # THIS IS CODE TO MASK OUT ONE AT A TIME. 
-                # top_x, top_y, width, height = stats[label, :4]
-
-                # # first apply mask to the segmentation mask
-                # altered_mask = torch.clone(mask)
-                # altered_mask[top_y:top_y+height, top_x:top_x + width] = 0.
-
-                # # now apply masking to the attentioned image
-                # altered_attentioned_img = torch.clone(attentioned_img)
-                # altered_attentioned_img[:, top_y:top_y+height, top_x:top_x + width] = torch.zeros((3, height, width))
-                # altered_x = torch.cat((orig_rgb, altered_attentioned_img, altered_mask))
             
-                # # run through model and compare! hehe
-                # altered_y = model(torch.unsqueeze(altered_x, 0))
-                # altered_y_preds = torch.round(torch.sigmoid(altered_y))
-                # breakpoint()
+            save_name = output_path / 'images' / (str(i) + '.jpg')
+            cv.imwrite(str(save_name), overlayed_img)
+            
+            if m > 3:
+                # print('more than 3')
+                solutions_sorted = sorted(solutions, key=lambda d: (d['corners'][1][0] - d['corners'][0][0]) * (d['corners'][2][1] - d['corners'][1][1]), reverse=True)
+                solutions_sorted = solutions_sorted[:3]
+                all_frames_predicted_outputs += solutions_sorted
+            else:
+                all_frames_predicted_outputs += solutions
+            if i == 10:
+                break 
+        
+    return all_frames_predicted_outputs
  
 def overlay_bbs(img, pred, bb):
 
@@ -525,12 +535,20 @@ def overlay_bbs(img, pred, bb):
     return img
 
 
-def extract_clevis_bb(top_x, top_y, width, height):
-    # top_x = top_x + (width / 4)
-    # top_y = top_y + (height / 4)
-    width = 3 * width / 5
-    height = 3 * height / 5
-    return top_x, top_y, width, height
+def extract_clevis_bb(top_x, top_y, width, height, dims, factor=0.6):
+    # first calculate center point and scaled width/height
+    center_x = top_x + (width / 2)
+    center_y = top_y + (height / 2)
+    new_width = factor * width 
+    new_height = factor * height
+    
+    # clamp it in the case that factor > 1 and we go out of bounds
+    clamped_topx = center_x - (new_width / 2) if center_x - (new_width / 2) > 0 else 0
+    clamped_topy = center_y - (new_height / 2) if center_y - (new_height / 2) > 0 else 0
+    clamped_height = new_height if clamped_topy + new_height < dims[0] else dims[0] - clamped_topy
+    clamped_width = new_width if clamped_topx + new_width < dims[1] else dims[1] - clamped_topx
+
+    return clamped_topx, clamped_topy, clamped_width, clamped_height
 
 def rescale_uint8(x):
     result = np.copy(x)

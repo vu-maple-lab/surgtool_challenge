@@ -3,7 +3,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 import argparse
 from pathlib import Path
-import math
+import json
 import os
 from dataset import * 
 from models import ResNet
@@ -27,6 +27,7 @@ def main(args):
     if not output_path.exists():
         print(f'Output path does not exist, so creating one at {str(output_path)}')
         os.mkdir(str(output_path))
+        os.mkdir(str(output_path / 'images'))
     if debug and not os.path.exists('./test'):
         print(f'test directory does not exist so creating one at ./test')
         os.mkdir('./test')
@@ -47,7 +48,12 @@ def main(args):
     model.eval()
 
     # define our loss function and optimizer
-    results = run_trial(model, dataloader, debug)
+    results = run_trial(model, dataloader, output_path, debug)
+    save_path = str(output_path / 'output.json')
+    with open(str(save_path), "w") as f:
+        json.dump(results, f)
+
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

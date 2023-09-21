@@ -25,24 +25,34 @@ Python 3.8 and PyTorch 2.0.1 was used to execute the project. You can install th
 
 First, create a conda environment using 
 
-`conda create --name maplelab python=3.8`
+```
+conda create --name maplelab python=3.8
+```
 
 And install all dependencies by
 
-`pip install -r requirements.txt`
+```
+pip install -r requirements.txt
+```
 
 First, preprocessing is required in order to create the dataset for training purposes. Download the provided EndoVis23 dataset, enter `./attention_mask`, and run
 
-`python preprocess.py --input_dir /path/to/endovis23 --model_dir /path/to/ternaus16.pt`
+```
+python preprocess.py --input_dir /path/to/endovis23 --model_dir /path/to/ternaus16.pt
+```
 
 Note that the path to the EndoVis23 should be the parent directory, ie the directory with 'training_data' and 'readme.txt' files. This code creates train and test folders that separate the videos into images and their masks (by running inference on the pretrained Ternaus16 model from EndoVis17).
 
 The trained ResNet-101 is provided as "category1.pt". To run training, execute
 
-`python train.py --input_dir /path/to/endovis23 --logs ./logs/ --num_epochs 50 --batch_size 4`
+```
+python train.py --input_dir /path/to/endovis23 --logs ./logs/ --num_epochs 50 --batch_size 4
+```
 
 To run the trial phase to extract labeled bounding boxes, please run 
 
-`python trial.py --input_dir /path/to/endovis23 --model_dir /path/to/category1.pt --output ./output`
+```
+python trial.py --input_dir /path/to/endovis23 --model_dir /path/to/category1.pt --output ./output
+```
 
 in order to save output images as well as the completed json file required by the challenge.

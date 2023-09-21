@@ -7,8 +7,13 @@ from tqdm import tqdm
 import random
 from pathlib import Path
 import glob
+from models import UNet16
 from natsort import natsorted
 import matplotlib.pyplot as plt 
+
+from torch.nn import functional as F
+from albumentations import Compose, Normalize
+from albumentations.pytorch.transforms import img_to_tensor
 
 TOOLS_ONE_HOT_ENCODING = {
     'needle driver': 0,
@@ -45,12 +50,29 @@ mask_transforms = T.Compose([T.ToPILImage(),
 # according to split_val c (0, 1), into train/test directories to set up for training
 def train_test_split(root_dir, split_val, debug):
     assert split_val < 1 and split_val > 0
-    color_dir = root_dir / 'raw' / 'color'
-    mask_dir = root_dir / 'raw' / 'processed_mask'
-    save_dir = root_dir / 'actual'
+    color_dir = root_dir / 'color'
+    mask_dir = root_dir / 'mask'
 
-    train_dir = save_dir / 'train'
-    test_dir = save_dir / 'test'
+    train_dir = root_dir / 'train'
+    test_dir = root_dir / 'test'
+    train_path_mask = train_dir / 'mask' 
+    train_path_color = train_dir / 'color'
+    test_path_mask = test_dir / 'mask' 
+    test_path_color = test_dir / 'color'
+
+    if not train_dir.exists():
+        os.system(f'mkdir {str(train_dir)}')
+    if not test_dir.exists():
+        os.system(f'mkdir {str(test_dir)}')
+    if not train_path_mask.exists():
+        os.system(f'mkdir {str(train_path_mask)}')
+    if not train_path_color.exists():
+        os.system(f'mkdir {str(train_path_color)}')
+    if not test_path_mask.exists():
+        os.system(f'mkdir {str(test_path_mask)}')
+    if not test_path_color.exists():
+        os.system(f'mkdir {str(test_path_color)}')
+    
 
     path_mask_imgs = glob.glob(str(mask_dir / '*.jpg'))
     random.shuffle(path_mask_imgs)
@@ -60,38 +82,23 @@ def train_test_split(root_dir, split_val, debug):
         # save it in train 
         if i < train_set_cutoff:
             # get the mask image and save it to train 
-            save_path_mask = train_dir / 'mask' 
-            command = 'cp ' + mask_path + ' ' + str(save_path_mask)
-            os.system(command)
-            if debug:
-                print(f"command: {command}") 
+            os.system(f'mv {mask_path} {str(train_path_mask)}')
 
             # get the color image and save it to train
-            save_path_color = train_dir / 'color'
             color_img_path = color_dir / Path(mask_path).name 
-            command = 'cp ' + str(color_img_path) + ' ' + str(save_path_color)
-            os.system(command)
-
-            if debug:
-                print(f"command: {command}") 
+            os.system(f'mv {str(color_img_path)} {str(train_path_color)}')
 
         # save it in test
         else:
-            save_path_mask = test_dir / 'mask' 
-            command = 'cp ' + mask_path + ' ' + str(save_path_mask)
-            os.system(command)
-            if debug:
-                print(f"command: {command}") 
+            os.system(f'mv {mask_path} {str(test_path_mask)}')
 
             # get the color image and save it to train
-            save_path_color = test_dir / 'color'
             color_img_path = color_dir / Path(mask_path).name 
-            command = 'cp ' + str(color_img_path) + ' ' + str(save_path_color)
-            os.system(command)
-
-            if debug:
-                print(f"command: {command}") 
-                
+            os.system(f'mv {str(color_img_path)} {str(test_path_color)}')
+    
+    print(f'Destroying empty {str(color_dir)} and {str(mask_dir)}...')
+    os.system(f'rmdir {str(color_dir)}')
+    os.system(f'rmdir {str(mask_dir)}')
     print('All done!')
 
 # process_binary reads in mask image to denoise and encourage connectivity
@@ -119,8 +126,7 @@ def process_binary(mask, debug):
     closed_img = cv.morphologyEx(opened_img, cv.MORPH_CLOSE, SE_closing)
 
     # finally convert it to grayscale so that we have 1 channel
-    grayscale = np.uint8(np.dot(closed_img[...,:3], [0.2989, 0.5870, 0.1140]))
-    _, result = cv.threshold(grayscale, 127, 255, cv.THRESH_BINARY)
+    _, result = cv.threshold(closed_img, 127, 255, cv.THRESH_BINARY)
 
     # save intermediate images to a file for testing
     if debug:
@@ -131,9 +137,108 @@ def process_binary(mask, debug):
         cv.imwrite('./test/2dilated_img.jpg', dilated_img)
         cv.imwrite('./test/3opened_img.jpg', opened_img)
         cv.imwrite('./test/4closed_img.jpg', closed_img)
-        cv.imwrite('./test/5result.jpg', grayscale)
+        cv.imwrite('./test/5result.jpg', result)
     
     return result
+
+def preprocess(root_dir, model_dir, debug):
+   
+    videos_path = root_dir / 'training_data' / 'video_clips'
+    if not root_dir.exists() or not videos_path.exists():
+        raise Exception("Root Directory should be the Endovis23 dataset with video_clips inside.")
+    
+    # create data paths
+    images_path = root_dir / 'color'
+    mask_path = root_dir / 'mask'
+    if not images_path.exists():
+        os.system(f'mkdir {str(images_path)}')
+    if not mask_path.exists():
+        os.system(f'mkdir {str(mask_path)}')
+
+    # load in ternaus model to run inference
+    model = UNet16(num_classes=1)
+    state = torch.load(str(model_dir), map_location=torch.device(device))
+    state = {key.replace('module.', ''): value for key, value in state['model'].items()}
+    model.load_state_dict(state)
+    model.to(device)
+    model.eval()
+
+    # image dimensions for cropping the UI out 
+    original_height, original_width = 720, 1280
+    height, width = 608, 896
+    h_start, w_start = 55, 194
+
+    # define a custom image transform
+    def img_transform(p=1):
+        return Compose([
+            Normalize(p=1)
+        ], p=p)
+
+    # for each image, process mask image and save color + mask to form our dataset for training
+    videos_path = natsorted(glob.glob(str(videos_path / '*.mp4')))
+    for video_path in tqdm(videos_path):
+        reader = cv.VideoCapture(video_path)
+        video_num = video_path[-10:-4]
+        i = 0
+        while reader.isOpened():
+            if i % 2 == 1:
+                continue 
+            ret, image = reader.read()
+            if ret == False:
+                break
+            
+            # run ternaus16 inference
+            image_ = image[h_start: h_start + height, w_start: w_start + width, :]
+            input_image = torch.unsqueeze(img_to_tensor(img_transform(p=1)(image=image_)['image']).to(device), dim=0)
+            outputs = model(input_image)
+            t_mask = (F.sigmoid(outputs).data.cpu().numpy() * 255).astype(np.uint8)
+            t_mask = t_mask.squeeze()
+
+            final_mask = np.zeros((original_height, original_width), dtype='uint8')
+            final_mask[h_start:h_start + height, w_start:w_start + width] = t_mask
+            final_mask = process_binary(final_mask, debug)
+
+            # filter the segmentations if it's a "bad segmentation"
+            total_area = final_mask.shape[0] * final_mask.shape[1]
+            white_pixel_area = np.sum(final_mask == 255)
+            if white_pixel_area > 0.4 * total_area:
+                i += 1
+                continue 
+
+            # segmentations should ideally be greater than 2% of the entire image
+            # connected component analysis
+            num_labels, labeled_img, stats, _ = cv.connectedComponentsWithStats(final_mask)
+
+            # filter out the labels 
+            useful_labels = []
+
+            for label in range(num_labels):
+                # skip background
+                if label == 0:
+                    continue
+                
+                # get the area of connected component
+                component_area = stats[label, 4]
+
+                # assert that a useful component should be at least 2% of the area of 
+                # the entire image. that being said
+                if component_area > 0.02 * total_area:
+                    useful_labels.append(label)
+
+            # create a new mask with only useful labels
+            new_mask = np.zeros_like(final_mask)
+            for label in useful_labels:
+                new_mask[labeled_img == label] = 255 
+
+            # save imgs 
+            img_name = video_num + '_' + str(i) + '.jpg'
+            save_path = str(images_path / img_name)
+            cv.imwrite(save_path, image)
+            save_path = str(mask_path / img_name)
+            cv.imwrite(save_path, new_mask)
+            i += 1
+        breakpoint()
+
 
 def filter_segmentations(root_dir, debug):
     color_dir = root_dir / 'raw' / 'color'

@@ -176,12 +176,16 @@ def preprocess(root_dir, model_dir, debug):
 
     # for each image, process mask image and save color + mask to form our dataset for training
     videos_path = natsorted(glob.glob(str(videos_path / '*.mp4')))
+    videos_path = videos_path[:10] # added for debugging purposes
     for video_path in tqdm(videos_path):
         reader = cv.VideoCapture(video_path)
         video_num = video_path[-10:-4]
         i = 0
         while reader.isOpened():
-            if i % 2 == 1:
+
+            # only get every 20 frames since consecutive frames don't give any real new information
+            if i % 50 != 0:
+                i += 1
                 continue 
             ret, image = reader.read()
             if ret == False:
@@ -208,7 +212,6 @@ def preprocess(root_dir, model_dir, debug):
             # segmentations should ideally be greater than 2% of the entire image
             # connected component analysis
             num_labels, labeled_img, stats, _ = cv.connectedComponentsWithStats(final_mask)
-
             # filter out the labels 
             useful_labels = []
 
@@ -229,7 +232,6 @@ def preprocess(root_dir, model_dir, debug):
             new_mask = np.zeros_like(final_mask)
             for label in useful_labels:
                 new_mask[labeled_img == label] = 255 
-
             # save imgs 
             img_name = video_num + '_' + str(i) + '.jpg'
             save_path = str(images_path / img_name)
@@ -237,7 +239,6 @@ def preprocess(root_dir, model_dir, debug):
             save_path = str(mask_path / img_name)
             cv.imwrite(save_path, new_mask)
             i += 1
-        breakpoint()
 
 
 def filter_segmentations(root_dir, debug):

@@ -1,5 +1,5 @@
 import argparse 
-from utils import preprocess, filter_segmentations, train_test_split
+from utils import preprocess, train_test_split
 from pathlib import Path
 import os
 
@@ -15,7 +15,7 @@ def main(args):
         raise Exception("model path does not exist.")
     if debug and not os.path.exists('./test'):
         os.mkdir('./test')
-        
+
     print(f'Preprocessing: generating binary masks and saving color images...')
     preprocess(data_dir, model_dir, debug)
     print(f'Generating Train-Test split for Training purposes...')

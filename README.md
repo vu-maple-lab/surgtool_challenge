@@ -60,28 +60,21 @@ python trial.py --input_dir /path/to/endovis23 --model_dir /path/to/category1.pt
 in order to save output images as well as the completed json file required by the challenge.
 
 ## Example Outputs
-<p float="left">
-  <img src="figs/one.png" width="100" />
-  <img src="figs/two.png" width="100" /> 
-  <img src="figs/three.png" width="100" />
-  <img src="figs/four.png" width="100" />
-  <img src="figs/five.png" width="100" />
-</p>
 
 <div class="row">
   <div class="column">
-    <img src="figs/one.png" alt="one" style="width:50%">
+    <img src="figs/one.png" alt="one" style="width:75%">
   </div>
   <div class="column">
-    <img src="figs/two.png" alt="two" style="width:50%">
+    <img src="figs/two.png" alt="two" style="width:75%">
   </div>
   <div class="column">
-    <img src="figs/three.png" alt="three" style="width:50%">
+    <img src="figs/three.png" alt="three" style="width:75%">
   </div>
   <div class="column">
-    <img src="figs/four.png" alt="four" style="width:50%">
+    <img src="figs/four.png" alt="four" style="width:75%">
   </div>
   <div class="column">
-    <img src="figs/five.png" alt="five" style="width:50%">
+    <img src="figs/five.png" alt="five" style="width:75%">
   </div>
 </div>
